@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>跨班選修點名與評分系統 (云端同步版)</title>
+    <style>
+        * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        body { background: #f0f2f5; margin: 0; padding: 12px; color: #333; font-size: 16px; }
+        .card { background: #fff; padding: 16px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); margin-bottom: 15px; }
+        h2, h3, h4 { margin-top: 0; color: #1e293b; }
+        .nav-tabs { display: flex; gap: 6px; margin-bottom: 15px; }
+        .nav-tabs button { flex: 1; padding: 12px 4px; border: none; background: #e2e8f0; border-radius: 8px; font-weight: bold; font-size: 14px; color: #475569; }
+        .nav-tabs button.active { background: #2563eb; color: #fff; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        .form-group { margin-bottom: 12px; }
+        label { display: block; font-weight: bold; margin-bottom: 5px; font-size: 14px; color: #64748b; }
+        input[type="text"], input[type="number"], input[type="date"], select, textarea { width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 16px; background: #f8fafc; }
+        button.btn { width: 100%; padding: 12px; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; transition: 0.2s; margin-top: 5px; }
+        .btn-primary { background: #2563eb; color: #fff; }
+        .btn-success { background: #10b981; color: #fff; }
+        .btn-warning { background: #f59e0b; color: #fff; }
+        .btn-danger { background: #ef4444; color: #fff; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 15px; }
+        th, td { border: 1px solid #e2e8f0; padding: 10px 6px; text-align: center; }
+        th { background: #f1f5f9; font-weight: bold; }
+        input[type="checkbox"] { transform: scale(1.4); }
+        .group-tag { background: #e0e7ff; color: #3730a3; padding: 4px 8px; border-radius: 6px; font-weight: bold; font-size: 13px; }
+        .absent-tag { background: #fee2e2; color: #991b1b; padding: 4px 8px; border-radius: 6px; font-weight: bold; font-size: 13px; }
+        .quick-add-bar { display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 8px; margin-bottom: 12px; }
+        .group-card { background: #f8fafc; border: 1px solid #cbd5e1; padding: 8px; border-radius: 8px; text-align: center; }
+        .btn-sm { padding: 6px 10px; border: none; border-radius: 4px; font-size: 13px; margin: 2px; font-weight: bold; cursor: pointer; }
+        .file-box { border: 2px dashed #cbd5e1; padding: 15px; text-align: center; border-radius: 8px; background: #f8fafc; margin-bottom: 10px; }
+    </style>
+</head>
+<body>
+
+<div class="card" style="padding: 12px; background: #1e293b; color: #fff; text-align: center;">
+    <h3 style="margin:0; color:#fff;">📱 課堂點名與評分系統</h3>
+</div>
+
+<div class="nav-tabs">
+    <button class="active" onclick="switchTab('import')">匯入/學生</button>
+    <button onclick="switchTab('rollcall')">點名/分組</button>
+    <button onclick="switchTab('score')">課堂加分</button>
+    <button onclick="switchTab('report')">成績統計</button>
+</div>
+
+<!-- 頁籤 1: 匯入與名單管理 -->
+<div id="tab-import" class="tab-content active">
+    <div class="card">
+        <h3>1. 建立或選擇課程</h3>
+        <div class="form-group">
+            <label>課程名稱：</label>
+            <input type="text" id="courseName" placeholder="例如：週二多元選修">
+        </div>
+
+        <hr style="border:0; border-top:1px solid #eee; margin:15px 0;">
+
+        <h4>方式 A：選擇 CSV / TXT 檔案匯入</h4>
+        <div class="file-box">
+            <input type="file" id="fileInput" accept=".csv, .txt">
+            <p style="font-size: 12px; color: #64748b; margin-top: 5px;">格式建議：每列以逗號或空格分隔 (例如: 101,01,張小明 或 101 01 張小明)</p>
+        </div>
+
+        <h4>方式 B：文字輸入或手動批次加入</h4>
+        <div class="form-group">
+            <textarea id="importRawText" rows="5" placeholder="可直接貼上，格式：原班級 座號 姓名&#10;101 01 張小明&#10;101 02 李大華"></textarea>
+        </div>
+
+        <button class="btn btn-primary" onclick="importStudents()">📥 匯入/新增學生名單</button>
+    </div>
+    
+    <div class="card">
+        <h3>已儲存課程管理</h3>
+        <div class="form-group">
+            <label>選擇課程：</label>
+            <select id="manageCourseSelect" onchange="renderManageTable()"></select>
+        </div>
+
+        <div class="card" style="background:#f8fafc; border:1px solid #e2e8f0; padding:10px;">
+            <h4>手動單筆新增學生到當前課程</h4>
+            <div style="display:flex; gap:5px;">
+                <input type="text" id="manualClass" placeholder="班級" style="flex:1;">
+                <input type="text" id="manualSeat" placeholder="座號" style="flex:1;">
+                <input type="text" id="manualName" placeholder="姓名" style="flex:2;">
+            </div>
+            <button class="btn btn-success" onclick="addSingleStudent()" style="margin-top:8px;">➕ 新增單筆學生</button>
+        </div>
+
+        <div id="manageTableContainer"></div>
+        <button class="btn btn-danger" onclick="deleteCourse()" style="margin-top:15px;">🗑️ 刪除選取的課程與成績資料</button>
+    </div>
+</div>
+
+<!-- 頁籤 2: 點名與隨機分組 -->
+<div id="tab-rollcall" class="tab-content">
+    <div class="card">
+        <h3>2. 出席點名與分組</h3>
+        <div class="form-group">
+            <label>選擇課程：</label>
+            <select id="rollcallCourseSelect" onchange="renderRollcallTable()"></select>
+        </div>
+        <div class="form-group">
+            <label>每組人數：</label>
+            <input type="number" id="groupSize" value="4" min="1">
+        </div>
+        <button class="btn btn-warning" onclick="autoGroup()">🔀 扣除缺席者並隨機分組</button>
+        <div id="rollcallTableContainer" style="margin-top:15px;"></div>
+    </div>
+</div>
+
+<!-- 頁籤 3: 課堂表現加分 -->
+<div id="tab-score" class="tab-content">
+    <div class="card">
+        <h3>3. 本堂課加分記錄</h3>
+        <div class="form-group">
+            <label>選擇課程：</label>
+            <select id="scoreCourseSelect" onchange="renderScoreSection()"></select>
+        </div>
+        <div class="form-group">
+            <label>日期：</label>
+            <input type="date" id="scoreDate">
+        </div>
+        
+        <h4>快速整組加分：</h4>
+        <div id="quickGroupBar" class="quick-add-bar"></div>
+        
+        <div id="scoreTableContainer"></div>
+        <button class="btn btn-success" onclick="saveTodayScores()" style="margin-top:15px;">💾 儲存本日成績並同步至雲端</button>
+    </div>
+</div>
+
+<!-- 頁籤 4: 成績統計輸出 -->
+<div id="tab-report" class="tab-content">
+    <div class="card">
+        <h3>4. 學期成績總覽</h3>
+        <div class="form-group">
+            <label>選擇課程：</label>
+            <select id="reportCourseSelect" onchange="renderReportTable()"></select>
+        </div>
+        <div id="reportContainer"></div>
+    </div>
+</div>
+
+<script>
+// 設定您的 Google Apps Script URL
+const GAS_URL = "https://script.google.com/macros/s/AKfycby2IEcPbmFrEcsPVltLLt66gwgUOExRQ0Pdxl0mhVPBU0bPwc8KaZI7x6cDQur4daS97w/exec";
+
+// 本地端快取資料架構
+let appData = JSON.parse(localStorage.getItem('CLASS_APP_DATA')) || {};
+
+function saveData() {
+    localStorage.setItem('CLASS_APP_DATA', JSON.stringify(appData));
+}
+
+// 同步資料至 Google Sheet
+function syncToGoogleSheet(courseName) {
+    if (!GAS_URL || GAS_URL.includes("您的")) return;
+    
+    const course = appData[courseName];
+    if (!course) return;
+
+    // 計算累計得分
+    let totals = {};
+    course.students.forEach(s => totals[s.id] = 0);
+    (course.records || []).forEach(r => {
+        for (let sId in r.scores) {
+            if (totals[sId] !== undefined) totals[sId] += r.scores[sId];
+        }
+    });
+
+    const studentsWithScore = course.students.map(s => ({
+        ...s,
+        totalScore: totals[s.id] || 0
+    }));
+
+    fetch(GAS_URL, {
+        method: "POST",
+        mode: "no-cors",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            action: "saveCourse",
+            courseName: courseName,
+            students: studentsWithScore
+        })
+    }).then(() => {
+        console.log("雲端同步成功");
+    }).catch(err => console.error("雲端同步失敗:", err));
+}
+
+// 頁籤切換
+function switchTab(tabId) {
+    document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.nav-tabs button').forEach(el => el.classList.remove('active'));
+    
+    document.getElementById('tab-' + tabId).classList.add('active');
+    event.target.classList.add('active');
+
+    updateAllDropdowns();
+    if (tabId === 'import') renderManageTable();
+    if (tabId === 'rollcall') renderRollcallTable();
+    if (tabId === 'score') renderScoreSection();
+    if (tabId === 'report') renderReportTable();
+}
+
+function updateAllDropdowns() {
+    const courses = Object.keys(appData);
+    const selects = ['manageCourseSelect', 'rollcallCourseSelect', 'scoreCourseSelect', 'reportCourseSelect'];
+    
+    selects.forEach(id => {
+        const select = document.getElementById(id);
+        const curVal = select.value;
+        select.innerHTML = '';
+        if (courses.length === 0) {
+            select.innerHTML = '<option value="">(無課程資料)</option>';
+        } else {
+            courses.forEach(c => {
+                const opt = document.createElement('option');
+                opt.value = c;
+                opt.textContent = c;
+                select.appendChild(opt);
+            });
+            if (courses.includes(curVal)) select.value = curVal;
+        }
+    });
+}
+
+// 解析文字陣列
+function parseStudentLines(lines, existingStudents = []) {
+    let newStudents = [...existingStudents];
+    let startIdx = newStudents.length + 1;
+
+    lines.forEach((line) => {
+        if (!line.trim()) return;
+        const parts = line.trim().split(/[\s,]+/); // 支援逗號或空格
+        if (parts.length >= 3) {
+            newStudents.push({
+                id: 'S' + (startIdx++),
+                origClass: parts[0],
+                seatNum: parts[1],
+                name: parts[2],
+                present: true,
+                group: 0
+            });
+        }
+    });
+    return newStudents;
+}
+
+// 1. 匯入學生名單 (文字/檔案)
+function importStudents() {
+    const course = document.getElementById('courseName').value.trim();
+    const rawText = document.getElementById('importRawText').value.trim();
+    const fileInput = document.getElementById('fileInput');
+
+    if (!course) { alert('請輸入課程名稱！'); return; }
+
+    let existingStudents = appData[course] ? appData[course].students : [];
+
+    if (fileInput.files.length > 0) {
+        const file = fileInput.files[0];
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const lines = e.target.result.split('\n');
+            const students = parseStudentLines(lines, existingStudents);
+            saveCourseData(course, students);
+            fileInput.value = '';
+        };
+        reader.readAsText(file);
+    } else if (rawText) {
+        const lines = rawText.split('\n');
+        const students = parseStudentLines(lines, existingStudents);
+        saveCourseData(course, students);
+        document.getElementById('importRawText').value = '';
+    } else {
+        alert('請先選擇 CSV/TXT 檔案，或是在文字方塊中輸入資料！');
+    }
+}
+
+// 手動新增單筆學生
+function addSingleStudent() {
+    const course = document.getElementById('manageCourseSelect').value;
+    const c = document.getElementById('manualClass').value.trim();
+    const s = document.getElementById('manualSeat').value.trim();
+    const n = document.getElementById('manualName').value.trim();
+
+    if (!course || !appData[course]) { alert('請先選擇有效的課程！'); return; }
+    if (!c || !s || !n) { alert('請完整填寫班級、座號與姓名！'); return; }
+
+    let students = appData[course].students;
+    students.push({
+        id: 'S' + (students.length + 1),
+        origClass: c,
+        seatNum: s,
+        name: n,
+        present: true,
+        group: 0
+    });
+
+    saveCourseData(course, students);
+    document.getElementById('manualClass').value = '';
+    document.getElementById('manualSeat').value = '';
+    document.getElementById('manualName').value = '';
+}
+
+function saveCourseData(course, students) {
+    if (!appData[course]) {
+        appData[course] = { students: students, records: [] };
+    } else {
+        appData[course].students = students;
+    }
+
+    saveData();
+    syncToGoogleSheet(course);
+    alert(`課程 [${course}] 名單更新完成，目前共 ${students.length} 名學生！`);
+    document.getElementById('courseName').value = '';
+    updateAllDropdowns();
+    renderManageTable();
+}
+
+function renderManageTable() {
+    const course = document.getElementById('manageCourseSelect').value;
+    const container = document.getElementById('manageTableContainer');
+    if (!course || !appData[course]) { container.innerHTML = '<p style="color:#64748b;">尚無學生資料</p>'; return; }
+
+    let html = `<table><thead><tr><th>原班級</th><th>座號</th><th>姓名</th></tr></thead><tbody>`;
+    appData[course].students.forEach(s => {
+        html += `<tr><td>${s.origClass}</td><td>${s.seatNum}</td><td>${s.name}</td></tr>`;
+    });
+    html += '</tbody></table>';
+    container.innerHTML = html;
+}
+
+// 刪除課程
+function deleteCourse() {
+    const course = document.getElementById('manageCourseSelect').value;
+    if (!course || !appData[course]) { alert('請先選擇要刪除的課程！'); return; }
+    
+    if (confirm(`⚠️ 確定要刪除課程 [${course}] 嗎？\n這將會清除該課程的所有學生名單與歷次成績紀錄！`)) {
+        delete appData[course];
+        saveData();
+        
+        if (GAS_URL && !GAS_URL.includes("您的")) {
+            fetch(GAS_URL, {
+                method: "POST",
+                mode: "no-cors",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ action: "deleteCourse", courseName: course })
+            });
+        }
+
+        updateAllDropdowns();
+        renderManageTable();
+        alert(`已成功刪除課程 [${course}]！`);
+    }
+}
+
+// 2. 點名與分組
+function renderRollcallTable() {
+    const course = document.getElementById('rollcallCourseSelect').value;
+    const container = document.getElementById('rollcallTableContainer');
+    if (!course || !appData[course]) { container.innerHTML = '<p style="color:#64748b;">請先選擇有效課程</p>'; return; }
+
+    const students = appData[course].students;
+    let presentCount = students.filter(s => s.present !== false).length;
+
+    let html = `<p><b>總人數：${students.length} 人 / 今日出席：${presentCount} 人</b></p>`;
+    html += `<table><thead><tr><th>出席</th><th>原班</th><th>座號</th><th>姓名</th><th>組別</th></tr></thead><tbody>`;
+
+    students.forEach(s => {
+        let isPresent = s.present !== false;
+        let badge = isPresent && s.group > 0 ? `<span class="group-tag">第 ${s.group} 組</span>` : `<span class="absent-tag">未分組/缺席</span>`;
+        html += `<tr>
+            <td><input type="checkbox" ${isPresent ? 'checked' : ''} onchange="togglePresent('${course}', '${s.id}', this.checked)"></td>
+            <td>${s.origClass}</td>
+            <td>${s.seatNum}</td>
+            <td>${s.name}</td>
+            <td>${badge}</td>
+        </tr>`;
+    });
+    html += '</tbody></table>';
+    container.innerHTML = html;
+}
+
+function togglePresent(course, studentId, isPresent) {
+    let student = appData[course].students.find(s => s.id === studentId);
+    if (student) {
+        student.present = isPresent;
+        if (!isPresent) student.group = 0;
+        saveData();
+        renderRollcallTable();
+    }
+}
+
+function autoGroup() {
+    const course = document.getElementById('rollcallCourseSelect').value;
+    const groupSize = parseInt(document.getElementById('groupSize').value) || 4;
+    if (!course || !appData[course]) return;
+
+    let presentStudents = appData[course].students.filter(s => s.present !== false);
+    if (presentStudents.length === 0) { alert('今日沒有出席學生！'); return; }
+
+    for (let i = presentStudents.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [presentStudents[i], presentStudents[j]] = [presentStudents[j], presentStudents[i]];
+    }
+
+    presentStudents.forEach((s, idx) => {
+        s.group = Math.floor(idx / groupSize) + 1;
+    });
+
+    saveData();
+    renderRollcallTable();
+    alert('分組完成！');
+}
+
+// 3. 課堂加分
+function renderScoreSection() {
+    const course = document.getElementById('scoreCourseSelect').value;
+    const container = document.getElementById('scoreTableContainer');
+    const groupBar = document.getElementById('quickGroupBar');
+
+    if (!document.getElementById('scoreDate').value) {
+        document.getElementById('scoreDate').value = new Date().toISOString().split('T')[0];
+    }
+
+    if (!course || !appData[course]) { 
+        container.innerHTML = '<p style="color:#64748b;">無學生資料</p>'; 
+        groupBar.innerHTML = '';
+        return; 
+    }
+
+    const students = appData[course].students;
+    const activeGroups = [...new Set(students.filter(s => s.present !== false && s.group > 0).map(s => s.group))].sort((a,b)=>a-b);
+
+    let barHtml = '';
+    activeGroups.forEach(g => {
+        barHtml += `
+            <div class="group-card">
+                <b>第 ${g} 組</b><br>
+                <button class="btn-sm btn-primary" onclick="addScoreByGroup(${g}, 1)">+1</button>
+                <button class="btn-sm btn-success" onclick="addScoreByGroup(${g}, 0.5)">+0.5</button>
+            </div>`;
+    });
+    groupBar.innerHTML = barHtml || '<p style="color:#64748b;">尚未進行分組</p>';
+
+    let html = `<table><thead><tr><th>組別</th><th>原班/座號</th><th>姓名</th><th>本日得分</th></tr></thead><tbody>`;
+    students.forEach(s => {
+        let isPresent = s.present !== false;
+        let scoreInput = isPresent 
+            ? `<input type="number" step="0.5" id="score_input_${s.id}" value="0" data-group="${s.group}" style="width:70px; text-align:center;">`
+            : `<span style="color:#94a3b8;">缺席</span><input type="hidden" id="score_input_${s.id}" value="0">`;
+            
+        html += `<tr>
+            <td>${s.group > 0 ? '第 ' + s.group + ' 組' : '-'}</td>
+            <td>${s.origClass}-${s.seatNum}</td>
+            <td>${s.name}</td>
+            <td>${scoreInput}</td>
+        </tr>`;
+    });
+    html += '</tbody></table>';
+    container.innerHTML = html;
+}
+
+function addScoreByGroup(groupNum, pts) {
+    document.querySelectorAll(`input[data-group='${groupNum}']`).forEach(input => {
+        input.value = (parseFloat(input.value) || 0) + pts;
+    });
+}
+
+function saveTodayScores() {
+    const course = document.getElementById('scoreCourseSelect').value;
+    const date = document.getElementById('scoreDate').value;
+
+    if (!course || !date) { alert('請確認課程與日期！'); return; }
+
+    let dayScores = {};
+    appData[course].students.forEach(s => {
+        const input = document.getElementById(`score_input_${s.id}`);
+        dayScores[s.id] = input ? (parseFloat(input.value) || 0) : 0;
+    });
+
+    if (!appData[course].records) appData[course].records = [];
+    appData[course].records.push({ date: date, scores: dayScores });
+
+    saveData();
+    syncToGoogleSheet(course);
+    alert(`已成功儲存 ${date} 的成績記錄，並同步至雲端！`);
+    renderScoreSection();
+}
+
+// 4. 成績統計與輸出
+function renderReportTable() {
+    const course = document.getElementById('reportCourseSelect').value;
+    const container = document.getElementById('reportContainer');
+    if (!course || !appData[course]) { container.innerHTML = '<p style="color:#64748b;">無資料</p>'; return; }
+
+    const students = appData[course].students;
+    const records = appData[course].records || [];
+
+    let totals = {};
+    students.forEach(s => totals[s.id] = 0);
+
+    records.forEach(r => {
+        for (let sId in r.scores) {
+            if (totals[sId] !== undefined) totals[sId] += r.scores[sId];
+        }
+    });
+
+    let html = `<p><b>已記錄上課次數：${records.length} 次</b></p>`;
+    html += `<table><thead><tr><th>原班級</th><th>座號</th><th>姓名</th><th>累計總加分</th></tr></thead><tbody>`;
+
+    let sortedStudents = [...students].sort((a,b) => a.origClass.localeCompare(b.origClass) || (a.seatNum - b.seatNum));
+
+    sortedStudents.forEach(s => {
+        html += `<tr>
+            <td>${s.origClass}</td>
+            <td>${s.seatNum}</td>
+            <td>${s.name}</td>
+            <td><b>${totals[s.id]}</b> 分</td>
+        </tr>`;
+    });
+    html += '</tbody></table>';
+    container.innerHTML = html;
+}
+
+// 初始化
+window.onload = function() {
+    updateAllDropdowns();
+    renderManageTable();
+};
+</script>
+</body>
+</html>
