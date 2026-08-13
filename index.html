@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>跨班選修點名與評分系統 (云端同步版)</title>
+    <title>跨班選修點名與評分系統 (雲端同步版)</title>
     <style>
         * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
         body { background: #f0f2f5; margin: 0; padding: 12px; color: #333; font-size: 16px; }
@@ -32,6 +32,10 @@
         .group-card { background: #f8fafc; border: 1px solid #cbd5e1; padding: 8px; border-radius: 8px; text-align: center; }
         .btn-sm { padding: 6px 10px; border: none; border-radius: 4px; font-size: 13px; margin: 2px; font-weight: bold; cursor: pointer; }
         .file-box { border: 2px dashed #cbd5e1; padding: 15px; text-align: center; border-radius: 8px; background: #f8fafc; margin-bottom: 10px; }
+        
+        /* 雲端同步區塊樣式 */
+        .cloud-sync-box { display: flex; gap: 8px; margin-bottom: 15px; }
+        .cloud-sync-box button { flex: 1; }
     </style>
 </head>
 <body>
@@ -49,6 +53,17 @@
 
 <!-- 頁籤 1: 匯入與名單管理 -->
 <div id="tab-import" class="tab-content active">
+
+    <!-- ☁️ 雲端手動同步按鈕區塊 -->
+    <div class="card" style="background: #eff6ff; border: 1px solid #bfdbfe;">
+        <h4 style="margin-bottom: 10px;">☁️ 全局數據雲端同步</h4>
+        <div class="cloud-sync-box">
+            <button class="btn btn-primary" onclick="uploadAllToCloud()">☁️ 上傳名單到雲端</button>
+            <button class="btn btn-success" onclick="downloadAllFromCloud()">☁️ 從雲端下載名單</button>
+        </div>
+        <p id="cloudSyncStatus" style="font-size: 13px; color: #1e40af; margin: 0; text-align: center;"></p>
+    </div>
+
     <div class="card">
         <h3>1. 建立或選擇課程</h3>
         <div class="form-group">
@@ -155,7 +170,55 @@ function saveData() {
     localStorage.setItem('CLASS_APP_DATA', JSON.stringify(appData));
 }
 
-// 同步資料至 Google Sheet
+// ☁️ 全局上傳至雲端 (將完整的 appData 上傳)
+function uploadAllToCloud() {
+    if (!GAS_URL) return;
+    const statusEl = document.getElementById('cloudSyncStatus');
+    statusEl.innerText = "⏳ 正在上傳全站資料至雲端...";
+
+    fetch(GAS_URL, {
+        method: "POST",
+        mode: "no-cors",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            action: "saveAll",
+            appData: appData
+        })
+    }).then(() => {
+        statusEl.innerText = "✅ 全站資料已成功上傳至雲端！";
+        setTimeout(() => statusEl.innerText = "", 3000);
+    }).catch(err => {
+        console.error("雲端上傳失敗:", err);
+        statusEl.innerText = "❌ 上傳失敗，請檢查網路！";
+    });
+}
+
+// ☁️ 全局從雲端下載 (將雲端資料下載覆蓋本地)
+function downloadAllFromCloud() {
+    if (!GAS_URL) return;
+    const statusEl = document.getElementById('cloudSyncStatus');
+    statusEl.innerText = "⏳ 正在從雲端下載最新資料...";
+
+    fetch(GAS_URL)
+    .then(res => res.json())
+    .then(data => {
+        if (data && data.appData) {
+            appData = data.appData;
+            saveData();
+            updateAllDropdowns();
+            renderManageTable();
+            statusEl.innerText = "✅ 已成功從雲端同步下載最新資料！";
+        } else {
+            statusEl.innerText = "⚠️ 雲端尚無備份資料。";
+        }
+        setTimeout(() => statusEl.innerText = "", 3000);
+    }).catch(err => {
+        console.error("雲端下載失敗:", err);
+        statusEl.innerText = "❌ 下載失敗，請檢查 GAS 後端是否已支援 GET 讀取。";
+    });
+}
+
+// 單一課程同步至 Google Sheet
 function syncToGoogleSheet(courseName) {
     if (!GAS_URL || GAS_URL.includes("您的")) return;
     
