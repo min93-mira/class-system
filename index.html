@@ -193,15 +193,20 @@ function uploadAllToCloud() {
     });
 }
 
-// ☁️ 全局從雲端下載 (將雲端資料下載覆蓋本地)
+// ☁️ 全局從雲端下載 (使用 JSONP 模式免除 CORS 錯誤)
 function downloadAllFromCloud() {
     if (!GAS_URL) return;
     const statusEl = document.getElementById('cloudSyncStatus');
     statusEl.innerText = "⏳ 正在從雲端下載最新資料...";
 
-    fetch(GAS_URL)
-    .then(res => res.json())
-    .then(data => {
+    // 建立唯一的 Callback 函式名稱
+    const callbackName = 'gas_callback_' + Math.round(100000 * Math.random());
+    
+    // 定義全域 Callback 處理函式
+    window[callbackName] = function(data) {
+        delete window[callbackName];
+        document.body.removeChild(script);
+
         if (data && data.appData) {
             appData = data.appData;
             saveData();
@@ -212,10 +217,15 @@ function downloadAllFromCloud() {
             statusEl.innerText = "⚠️ 雲端尚無備份資料。";
         }
         setTimeout(() => statusEl.innerText = "", 3000);
-    }).catch(err => {
-        console.error("雲端下載失敗:", err);
-        statusEl.innerText = "❌ 下載失敗，請檢查 GAS 後端是否已支援 GET 讀取。";
-    });
+    };
+
+    // 動態加入 <script> 標籤發送 GET 請求
+    const script = document.createElement('script');
+    script.src = GAS_URL + (GAS_URL.includes('?') ? '&' : '?') + 'callback=' + callbackName;
+    script.onerror = function() {
+        statusEl.innerText = "❌ 下載失敗，請確認 GAS 網址與部署權限設為「所有人」。";
+    };
+    document.body.appendChild(script);
 }
 
 // 單一課程同步至 Google Sheet
